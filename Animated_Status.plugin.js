@@ -1,4 +1,4 @@
-//META{"name":"CountdownStatus","source":"https://github.com/YourName/CountdownStatus","website":"https://github.com/YourName/CountdownStatus"}*//
+//META{"name":"CountdownStatus","source":"https://github.com/CryoPhynix/Animated-Countdown-Status/blob/main/Animated_Status.plugin.js","website":"https://github.com/CryoPhynix/Animated-Countdown-Status"}*//
 
 class CountdownStatus {
     constructor() {
