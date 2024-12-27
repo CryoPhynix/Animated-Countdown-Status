@@ -13,8 +13,8 @@ class CountdownStatus {
         this.hourglassIndex = 0;
 
         // Plugin metadata
-        this.pluginName = " Animated Countdown Status";
-        this.pluginDescription = "Displays a live countdown to a date/time.";
+        this.pluginName = "Animated Countdown Status";
+        this.pluginDescription = "Displays a live countdown to a date/time (with custom label).";
         this.pluginVersion = "1.4.0";
         this.pluginAuthor = "Phynix";
     }
@@ -25,8 +25,10 @@ class CountdownStatus {
     getAuthor() { return this.pluginAuthor; }
 
     load() {
-        // Load the target date from BdApi storage or default to January 7, 2025
+        // Load the target date or default to January 7, 2025
         this.targetDateString = BdApi.getData("CountdownStatus", "targetDateString") || "2025-01-07T00:00:00";
+        // Load the custom label or default to empty (which shows date)
+        this.targetLabelString = BdApi.getData("CountdownStatus", "targetLabelString") || "";
 
         // Grab internal Webpack modules to get the Discord token & user
         this.modules = this.modules || (() => {
@@ -62,16 +64,19 @@ class CountdownStatus {
     }
 
     /**
-     * Build a string like "5d 12h 34m 56s until 1/7/2025"
+     * Build a string like "5d 12h 34m 56s until My Event"
+     * or fall back to the date if the label is empty.
      */
     getCountdownString() {
         const now = Date.now();
         const targetTime = new Date(this.targetDateString).getTime();
         const diff = targetTime - now;
 
+        // If the date is invalid
         if (isNaN(targetTime)) {
             return "Invalid target date!";
         }
+        // If the countdown has passed
         if (diff <= 0) {
             return "Countdown finished!";
         }
@@ -81,7 +86,12 @@ class CountdownStatus {
         const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
         const seconds = Math.floor((diff % (1000 * 60)) / 1000);
 
-        return `${days}d ${hours}h ${minutes}m ${seconds}s until ${new Date(this.targetDateString).toLocaleString()}`;
+        // If we have a custom label, use it; otherwise, show the date/time
+        const label = this.targetLabelString.trim().length > 0
+            ? this.targetLabelString.trim()
+            : new Date(this.targetDateString).toLocaleString();
+
+        return `${days}d ${hours}h ${minutes}m ${seconds}s until ${label}`;
     }
 
     /**
@@ -92,7 +102,7 @@ class CountdownStatus {
         const hourglass = this.hourglassFrames[this.hourglassIndex];
         this.hourglassIndex = (this.hourglassIndex + 1) % this.hourglassFrames.length;
 
-        // Construct the text, e.g. "⏳ 5d 12h 34m 56s until ..."
+        // Construct the text, e.g. "⏳ 5d 12h 34m 56s until My Event"
         const text = `${hourglass} ${this.getCountdownString()}`;
 
         // Make the PATCH request to Discord
@@ -160,49 +170,69 @@ class CountdownStatus {
         req.send(JSON.stringify({ custom_status: status }));
     }
 
+    /**
+     * Settings panel: Allows user to set both the target date/time and a custom label
+     */
     getSettingsPanel() {
         const panel = document.createElement("div");
         panel.style.padding = "10px";
 
-        // Title/label
-        const label = document.createElement("h3");
-        label.innerText = "Target Date/Time for Countdown:";
-        panel.appendChild(label);
+        // --- Target Date/Time ---
+        const dateLabel = document.createElement("h3");
+        dateLabel.innerText = "Target Date/Time for Countdown:";
+        panel.appendChild(dateLabel);
 
-        // Input box
-        const input = document.createElement("input");
-        input.type = "text";
-        input.value = this.targetDateString;
-        input.placeholder = "e.g. 2025-01-07T00:00:00";
-        input.style.width = "250px";
-        input.style.marginRight = "10px";
-        panel.appendChild(input);
+        const dateInput = document.createElement("input");
+        dateInput.type = "text";
+        dateInput.value = this.targetDateString;
+        dateInput.placeholder = "e.g. 2025-01-07T00:00:00";
+        dateInput.style.width = "250px";
+        dateInput.style.marginRight = "10px";
+        panel.appendChild(dateInput);
 
-        // Save button
+        // --- Custom Label ---
+        const labelTitle = document.createElement("h3");
+        labelTitle.innerText = "Custom Label (optional):";
+        panel.appendChild(labelTitle);
+
+        const labelInput = document.createElement("input");
+        labelInput.type = "text";
+        labelInput.value = this.targetLabelString;
+        labelInput.placeholder = "e.g. My Birthday, Vacation, etc.";
+        labelInput.style.width = "250px";
+        labelInput.style.marginRight = "10px";
+        panel.appendChild(labelInput);
+
+        // --- Save Button ---
         const btnSave = document.createElement("button");
         btnSave.innerText = "Save";
         btnSave.onclick = () => {
-            BdApi.setData("CountdownStatus", "targetDateString", input.value);
-            this.targetDateString = input.value;
-            BdApi.showToast("CountdownStatus: Target date updated!", { type: "success" });
+            BdApi.setData("CountdownStatus", "targetDateString", dateInput.value);
+            BdApi.setData("CountdownStatus", "targetLabelString", labelInput.value);
+
+            this.targetDateString = dateInput.value;
+            this.targetLabelString = labelInput.value;
+
+            BdApi.showToast("CountdownStatus: Settings updated!", { type: "success" });
 
             // Immediately trigger an update
             this.updateStatus();
         };
         panel.appendChild(btnSave);
 
-        // Helpful note
+        // --- Helpful note ---
         const note = document.createElement("p");
         note.innerHTML = `
-      <br/>
-      <strong>Notes:</strong>
-      <ul>
-        <li>Use any valid date/time (e.g., "2025-01-07" or "2025-01-07T14:30:00").</li>
-        <li>Plugin updates status every 2 seconds by default.</li>
-        <li>Open the DevTools console (Ctrl+Shift+I) to see detailed logs if there's an error.</li>
-        <li>The hourglass emoji flips each update to show animation.</li>
-      </ul>
-    `;
+            <br/>
+            <strong>Notes:</strong>
+            <ul>
+                <li>Use any valid date/time (e.g. "2025-01-07" or "2025-01-07T14:30:00").</li>
+                <li>If the label is blank, it will use the date/time in the status.</li>
+                <li>Plugin updates status every 2 seconds by default.</li>
+                <li>Open the DevTools console (Ctrl+Shift+I) to see detailed logs if there's an error.</li>
+                <li>The hourglass emoji flips each update to show animation.</li>
+            </ul>
+        `;
         panel.appendChild(note);
 
         return panel;
